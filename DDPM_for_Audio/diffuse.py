@@ -1,7 +1,7 @@
 import torch
 from tqdm import tqdm
 class forwardDiff:
-    def __init__(self, beta_min, beta_max, diffusion_step=1000, device='cpu') -> None:
+    def __init__(self, beta_min, beta_max, diffusion_step=500, device='cpu') -> None:
         self.diffusion_step = diffusion_step
         self.beta, self.alpha, self.alpha_hat = self.noise_schedule(beta_min, beta_max)
         self.device = device

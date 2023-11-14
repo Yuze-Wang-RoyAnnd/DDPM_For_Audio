@@ -2,7 +2,7 @@ import torch
 import torchaudio
 import torch.utils.data
 import numpy as np
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 import os
 
 batchSize = 4

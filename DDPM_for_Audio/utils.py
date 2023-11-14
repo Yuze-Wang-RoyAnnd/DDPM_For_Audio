@@ -1,15 +1,18 @@
 from matplotlib import pyplot as plt
 from scipy import signal as sl
 import torch
+import numpy as np
 
+@staticmethod
 def visualize_noising(audio, timeSteps:list, dif):
     fig, ax = plt.subplots(len(timeSteps))
     noises, _ = dif.noise_audio(audio, timeSteps)
     for i, n in enumerate(noises):
-        ax[i].plot(torch.arange(1000), n[0, :1000])
+        ax[i].plot(torch.arange(len(n[0])), n[0, :])
     plt.show()
 
-def visualize_noise_as_mel(audio, timeSteps:list, dif):
+@staticmethod
+def visualize_noising_as_mel(audio, timeSteps:list, dif):
     fig, ax = plt.subplots(len(timeSteps))
     noises, _ = dif.noise_audio(audio, timeSteps)
     for i, n in enumerate(noises):
@@ -17,4 +20,3 @@ def visualize_noise_as_mel(audio, timeSteps:list, dif):
 
         ax[i].pcolormesh(t, f[:100], 20*np.log10(Sxx[0, :100, :]), shading='gouraud')
     plt.show()
-
