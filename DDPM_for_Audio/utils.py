@@ -41,4 +41,4 @@ def display_waveform_hist(i, signal,sample_rate, fig, ax, text='Audio'):
 def save_as_ani(img_list, text, path):
     fig, ax = plt.subplots(1,1)
     ani = animation.FuncAnimation(fig, partial(display_waveform_hist, signal=img_list, sample_rate=22050, fig=fig, ax=ax, text=text), frames=len(img_list))
-    ani.save(os.path.join(path, f'{text}.gif'), dpi=300, writer=animation.PillowWriter(fps=10))
+    ani.save(os.path.join(path, f'{text}.gif'), dpi=300, writer=animation.PillowWriter(fps=25))

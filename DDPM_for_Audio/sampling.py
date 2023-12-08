@@ -16,21 +16,6 @@ import math
 
 
 models = {}
-def infer(model, extent, ground_file=None, device='mps', extension_seconds = 3):
-    if ground_file:
-        reference, fs = librosa.load(ground_file)
-        reference = torch.tensor(reference.astype(np.float32)).unsqueeze(0).to('mps')
-        assert fs == model.params.sample_rate, f"sample rate mismatch, expected {model.params.sample_rate} but got {fs}"
-    else:
-        reference, _ = sample(model, device)
-    output = reference.clone()
-    for i in range(extension_seconds):
-        print(f'Extending {i+1} second(s)')
-        sample = extent(model, output[:, -66150:], device)
-        output = torch.cat((output[:, :-66150], sample), dim=1)
-    
-    return output
-    #generate a 10 second audio, each extension pass generate an audio that is 1 second longer
 
 
 def noise_audio(audio, alpha_tensor, time, device):
@@ -52,7 +37,7 @@ def denoise_audio(audio, predicted,alpha, alpha_cum, beta, step, device):
         audio += sigma * noise
     return audio
 
-def sample(model, device):
+def smple(model, device):
     with torch.no_grad():
         beta = torch.tensor(np.array(model.params.noise_schedule).astype(np.float32)).to(device)
         alpha = 1 - beta
@@ -64,14 +49,17 @@ def sample(model, device):
             p_noise = model(target, torch.tensor([time_schedule[n]], device=device), None)
             target = denoise_audio(target, p_noise, alpha, alpha_cum, beta, n, device)
             target = torch.clamp(target, -1.0, 1.0) #renormalize
-        #target = noise_audio(target, alpha_cum, 0, device)
-        p_noise = model(target, torch.tensor([time_schedule[n]], device=device), None)
-        target = denoise_audio(target, p_noise, alpha, alpha_cum, beta, n, device)
-        target = torch.clamp(target, -1.0, 1.0) #renormalize
+        for i in range(5):
+            p_noise = model(target, torch.tensor([time_schedule[n]], device=device), None)
+            target = denoise_audio(target, p_noise, alpha, alpha_cum, beta, n, device)
+            target = torch.clamp(target, -1.0, 1.0) #renormalize
+
     return target
 
 
-def resampling_extension(model, reference: torch.tensor, device):
+def resampling_extension(model, reference: torch.tensor, device, track_history=False):
+    if track_history:
+        target_through_time = []
     with torch.no_grad():
         beta = torch.tensor(np.array(model.params.noise_schedule).astype(np.float32)).to(device)
         alpha = 1.0 - beta
@@ -110,12 +98,17 @@ def resampling_extension(model, reference: torch.tensor, device):
                         curr_n -= 1
             n -= 1
             pbar.update(1)
-        target = noise_audio(target, alpha_cum, 0, device)
-        p_noise = model(target, torch.tensor([time_schedule[n]], device=device), None)
-        target = denoise_audio(target, p_noise, alpha, alpha_cum, beta, n, device)
-        target = torch.clamp(target, -1.0, 1.0) #renormalize
-
-    return target
+            if track_history:
+                target_through_time.append(target.clone().squeeze(0).detach().cpu())
+        for _ in range(3):
+            target = noise_audio(target, alpha_cum, 0, device)
+            p_noise = model(target, torch.tensor([time_schedule[n]], device=device), None)
+            target = denoise_audio(target, p_noise, alpha, alpha_cum, beta, n, device)
+            target = torch.clamp(target, -1.0, 1.0) #renormalize
+    if track_history:
+        return target, target_through_time
+    else:
+        return target
 
 
 def interpolation_extention(model, reference: torch.tensor, device, track_history=False):
@@ -149,9 +142,10 @@ def interpolation_extention(model, reference: torch.tensor, device, track_histor
                 target_through_time.append(target.clone().squeeze(0).detach().cpu())
             tq_d.set_postfix_str(s=f"lambda: {lmbda[i]}", refresh=True)
         #denoise one more time
-        p_noise = model(target, torch.tensor([time_schedule[n]], device=device), None)
-        target = denoise_audio(target, p_noise, alpha, alpha_cum, beta, n, device)
-        target = torch.clamp(target, -1.0, 1.0) #renormalize
+        for _ in range(5):
+            p_noise = model(target, torch.tensor([time_schedule[n]], device=device), None)
+            target = denoise_audio(target, p_noise, alpha, alpha_cum, beta, n, device)
+            target = torch.clamp(target, -1.0, 1.0) #renormalize
     if track_history:
         return target, target_through_time
     else:
@@ -177,9 +171,10 @@ def normal_ext(model, reference: torch.tensor, device, track_history=False):
             target = torch.clamp(target, -1.0, 1.0) #renormalize
             if track_history:
                 target_through_time.append(target.clone().squeeze(0).detach().cpu())
-        p_noise = model(target, torch.tensor([time_schedule[n]], device=device), None)
-        target = denoise_audio(target, p_noise, alpha, alpha_cum, beta, n, device)
-        target = torch.clamp(target, -1.0, 1.0) #renormalize
+        for _ in range(5):
+            p_noise = model(target, torch.tensor([time_schedule[n]], device=device), None)
+            target = denoise_audio(target, p_noise, alpha, alpha_cum, beta, n, device)
+            target = torch.clamp(target, -1.0, 1.0) #renormalize
     if track_history:
         return target, target_through_time
     else:
@@ -188,7 +183,7 @@ def normal_ext(model, reference: torch.tensor, device, track_history=False):
 
 def setup(args):
     if isinstance(args, ArgumentParser): #as CLI
-        model_dir = args.model_dir
+        model_dir = args.parse_args().model_dir
     elif isinstance(args, dict): #as API
         model_dir = args['model_dir']
     else:
@@ -210,10 +205,40 @@ def setup(args):
     model.params.override(base_params)
     return model, device
 
+def infer(model, extent, ground_file=None, device='mps', extension_seconds = 3):
+    if ground_file:
+        reference, fs = librosa.load(ground_file)
+        reference = torch.tensor(reference.astype(np.float32)).unsqueeze(0).to('mps')
+        assert fs == model.params.sample_rate, f"sample rate mismatch, expected {model.params.sample_rate} but got {fs}"
+    else:
+        reference = smple(model, device)
+    output = reference.clone()
 
-def main(args):
-    model, device = setup(args)
-    wav, fs = infer(model, device, args.ground_file)
+
+    for i in range(extension_seconds):
+        print(f'Extending {i+1} second(s)')
+        sample = extent(model, output[:, -88200:], device)
+        output = torch.cat((output[:, :-88200], sample), dim=1)
+    
+    return output
+    #generate a 10 second audio, each extension pass generate an audio that is 1 second longer
+
+
+
+def main(parser):
+    model, device = setup(parser)
+    args = parser.parse_args()
+    match args.extent:
+        case 'interpolation_extention':
+            algo = interpolation_extention
+        case 'resampling_extension':
+            algo = resampling_extension
+        case 'normal_extention':
+            algo = normal_ext
+        case _:
+            raise TypeError('Unrecongized extention algorithm')
+
+    wav, fs = infer(model, algo, args.ground_file, device, int(args.seconds))
     soundfile.write(args.output, wav, base_params.sample_rate)
 
 
@@ -222,7 +247,12 @@ if __name__ == '__main__':
   parser.add_argument('model_dir',
       help='directory containing a trained model (or full path to weights.pt file)')
   parser.add_argument('--ground_file',
-      help='path to audio file that we want to generated from, if not provided, generate from static', required='False')
-  parser.add_argument('--output', '-o', default='output.wav',
+      help='path to audio file that we want to generated from, if not provided, generate from static')
+  parser.add_argument('--output', default='output.wav',
       help='output file name')
-  main(parser.parse_args())
+  parser.add_argument('--extent',
+      help='inpaint algorithm you want to use, default=interpolation_extention', 
+      default='interpolation_extention')
+  parser.add_argument('--seconds',
+      help='how long do you want to extends', default=5)
+  main(parser)
