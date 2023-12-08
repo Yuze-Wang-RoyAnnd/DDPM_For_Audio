@@ -36,11 +36,11 @@ In the RePaint paper [Andreas et al.], the author introduced backtracking steps 
 We implemented interpolation gudiance to help leviate this problem. Instead of backtracking during diffusion steps, we harmonize the input of generated parts with base parts by adding them together using an lambda scale. We slowly change this scale during diffusion step as a way to guide the final output to acheve an harmonizing output.
 
 Diffusion history of Interpolation gudiance:
-![Diffusion history](/Users/roywang/Schools/Project/DDPM_for_Audio/misc/interpolation.gif)
+![Diffusion history](DDPM_for_Audio/misc/interpolation.gif)
 
 Diffusion history of Repaint:
-![Diffusion history](/Users/roywang/Schools/Project/DDPM_for_Audio/misc/repaint_concat.gif)
+![Diffusion history](DDPM_for_Audio/misc/repaint_concat.gif)
 
 Diffusion history of Do-Nothing:
-![Diffusion history](/Users/roywang/Schools/Project/DDPM_for_Audio/misc/normal_concat.gif)
+![Diffusion history](DDPM_for_Audio/misc/normal_concat.gif)
 
